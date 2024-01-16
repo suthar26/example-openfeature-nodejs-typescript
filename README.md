@@ -1,6 +1,6 @@
-# DevCycle NodeJS Server SDK Typescript Example App
+# DevCycle NodeJS Server SDK Example App (Typescript)
 
-An example app built using the [DevCycle NodeJS Server SDK](https://docs.devcycle.com/sdk/server-side-sdks/node/) with local bucketing
+An example app built using the [DevCycle NodeJS Server SDK](https://docs.devcycle.com/sdk/server-side-sdks/node/) and TypeScript
 
 ## Running the Example
 ### Setup

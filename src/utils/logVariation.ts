@@ -22,7 +22,7 @@ export const logVariation = () => {
       const speed = devcycleClient.variableValue(SERVICE_USER, 'togglebot-speed', 'off')
 
       const spinChars = speed === 'slow' ? "◟◜◝◞" : "◜◠◝◞◡◟"
-      const spinner = speed === 'off' ? '○' : spinChars[idx]
+      const spinner = speed === 'off' ? '○' : spinChars[idx % spinChars.length]
       idx = (idx + 1) % spinChars.length
 
       const face = wink ? '(○ ‿ ○)' : '(- ‿ ○)'

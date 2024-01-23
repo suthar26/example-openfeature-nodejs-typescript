@@ -10,7 +10,7 @@ jest.mock("./devcycle", () => ({
   initializeDevCycleClient: () => mockDevCycleClient,
   getDevCycleClient: () => mockDevCycleClient,
 }));
-jest.mock("./utils/logTogglebot");
+jest.mock("./utils/logVariation");
 
 describe("greeting", () => {
   const mockVariableValue = (variable: string, value: DVCVariableValue) => {

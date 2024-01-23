@@ -1,9 +1,9 @@
 import dotenv from "dotenv";
 dotenv.config();
-import express, { Request, Response } from "express";
+import express, { Request } from "express";
 import { initializeDevCycleClient } from "./devcycle";
 import greetingHandler from "./routes/greeting";
-import { logTogglebot } from "./utils/logTogglebot";
+import { logVariation } from "./utils/logVariation";
 import { DevCycleUser } from "@devcycle/nodejs-server-sdk";
 
 export interface DevCycleRequest extends Request {
@@ -56,7 +56,7 @@ async function run() {
    * Log togglebot to the console using the togglebot-spin and togglebot-wink
    * variables to control the output
    */
-  logTogglebot();
+  logVariation();
 
   return app;
 }

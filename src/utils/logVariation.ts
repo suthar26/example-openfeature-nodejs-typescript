@@ -71,5 +71,5 @@ const addColor = (text: string, color: Color) => {
 const writeToConsole = (text: string, color: Color) => {
   text = addColor(text, color)
 
-  process.stdout.write('\r\x1b[K' + text)
+  process.stdout.write('\x1b[K  ' + text + '\r')
 }

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { getDevCycleClient } from "../devcycle";
+import { getOpenFeatureClient } from "../devcycle";
 
 const greetings = {
   default: {
@@ -20,11 +20,12 @@ const greetings = {
   },
 };
 
-export default (req: Request, res: Response) => {
-  const step = getDevCycleClient().variableValue<keyof typeof greetings>(
-    req.user,
+export default async (req: Request, res: Response) => {
+  const openFeatureClient = getOpenFeatureClient();
+  const step = await openFeatureClient.getStringValue<keyof typeof greetings>(
     "example-text",
-    "default"
+    "default",
+    req.user
   );
   const { header, body } = greetings[step];
 

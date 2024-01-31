@@ -1,8 +1,8 @@
-const { getDevCycleClient } = require('../devcycle')
+const { getDevCycleClient, getOpenFeatureClient } = require('../devcycle')
 
 /**
- * Since this is used outside of a request context, we define a service user.
- * This can contian properties unique to this service, and allows you to target
+ * Since this is used outside a request context, we define a service user.
+ * This can contain properties unique to this service, and allows you to target
  * services in the same way you would target app users.
  */
 const SERVICE_USER = { user_id: 'api-service' }
@@ -12,14 +12,17 @@ const SERVICE_USER = { user_id: 'api-service' }
  */
 export const logVariation = () => {
     const devcycleClient = getDevCycleClient()
+    const openFeatureClient = getOpenFeatureClient()
 
     let idx = 0
-    const renderFrame = () => {
+    const renderFrame = async () => {
+      // fetch the Variation name from DevCycle
       const features = devcycleClient.allFeatures(SERVICE_USER)
       const { variationName = 'Default' } = features['hello-togglebot'] ?? {}
 
-      const wink = devcycleClient.variableValue(SERVICE_USER, 'togglebot-wink', false)
-      const speed = devcycleClient.variableValue(SERVICE_USER, 'togglebot-speed', 'off')
+      // fetch the togglebot variables from OpenFeature
+      const wink = await openFeatureClient.getBooleanValue('togglebot-wink', false, SERVICE_USER)
+      const speed = await openFeatureClient.getStringValue('togglebot-speed', 'off', SERVICE_USER)
 
       const spinChars = speed === 'slow' ? "◟◜◝◞" : "◜◠◝◞◡◟"
       const spinner = speed === 'off' ? '○' : spinChars[idx % spinChars.length]
@@ -35,9 +38,10 @@ export const logVariation = () => {
       const timeout = ['fast', 'surprise', 'off-axis'].includes(speed) ? 100 : 500
       setTimeout(renderFrame, timeout)
     }
-    setTimeout(() => {
+
+    setTimeout(async () => {
       process.stdout.write('\n')
-      renderFrame()
+      await renderFrame()
     }, 500)
 }
 

@@ -1,17 +1,18 @@
 import dotenv from "dotenv";
 dotenv.config();
 import express, { Request } from "express";
-import { initializeDevCycleClient } from "./devcycle";
+import { initializeDevCycleWithOpenFeature } from "./devcycle";
 import greetingHandler from "./routes/greeting";
 import { logVariation } from "./utils/logVariation";
 import { DevCycleUser } from "@devcycle/nodejs-server-sdk";
+import { EvaluationContext } from "@openfeature/server-sdk";
 
-export interface DevCycleRequest extends Request {
-  user: DevCycleUser;
+export interface OpenFeatureRequest extends Request {
+  user: EvaluationContext;
 }
 
 async function run() {
-  const devcycleClient = await initializeDevCycleClient();
+  const { devcycleClient } = await initializeDevCycleWithOpenFeature();
 
   const app = express();
   app.use(express.urlencoded({ extended: false }));
@@ -48,7 +49,7 @@ async function run() {
    * Return all variable values for debugging purposes
    */
   app.get("/variables", (req, res) => {
-    const variables = devcycleClient.allVariables(req.user);
+    const variables = devcycleClient.allVariables(req.user as unknown as DevCycleUser);
     res.json(variables);
   });
 

@@ -1,6 +1,7 @@
-# DevCycle NodeJS Server SDK Example App (Typescript)
+# DevCycle OpenFeature NodeJS Server SDK Example App (Typescript)
 
-An example app built using the [DevCycle NodeJS Server SDK](https://docs.devcycle.com/sdk/server-side-sdks/node/) and TypeScript
+An example app built using the [OpenFeature Node.js SDK](https://openfeature.dev/docs/reference/technologies/server/javascript)
+and [DevCycle Node.js Server SDK](https://docs.devcycle.com/sdk/server-side-sdks/node/) with TypeScript.
 
 ## Creating a Demo Feature
 This example app requires that your project has a feature with the expected variables, as well as some simple targeting rules. 
@@ -8,7 +9,6 @@ This example app requires that your project has a feature with the expected vari
 #### ⇨ [Click here](https://app.devcycle.com/r/create?resource=feature&key=hello-togglebot) to automatically create the feature in your project ⇦
 
 When you run the example app and switch your identity between users, you'll be able to see the feature's different variations.
-
 
 ## Running the Example
 ### Setup

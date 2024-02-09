@@ -2,7 +2,9 @@
     "name": "example-nodejs-typescript",
     "version": "1.0.0",
     "dependencies": {
-        "@devcycle/nodejs-server-sdk": "^1.22.1",
+        "@devcycle/nodejs-server-sdk": "1.23.0",
+        "@openfeature/core": "^0.0.25",
+        "@openfeature/server-sdk": "^1.11.0",
         "dotenv": "^16.3.1",
         "express": "^4.18.2",
         "supertest": "^6.3.3"

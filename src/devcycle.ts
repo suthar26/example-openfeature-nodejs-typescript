@@ -22,7 +22,7 @@ export async function initializeDevCycleWithOpenFeature() {
   });
 
   // Pass the DevCycle OpenFeature Provider to OpenFeature, wait for devcycle to be initialized
-  await OpenFeature.setProviderAndWait(devcycleClient.getOpenFeatureProvider());
+  await OpenFeature.setProviderAndWait(await devcycleClient.getOpenFeatureProvider());
   openFeatureClient = OpenFeature.getClient();
 
   return { devcycleClient, openFeatureClient };

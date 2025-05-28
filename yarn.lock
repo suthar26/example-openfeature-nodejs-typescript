@@ -627,7 +627,7 @@
   resolved "https://registry.npmjs.org/@openfeature/js-sdk/-/js-sdk-1.6.1.tgz"
   integrity sha512-IMxkVxpAiiMfmqQXLsMlePb0/NtmmuisOcA27LGjJy7dXRqafNpJlzJXxSsGou1+/DtrFOVkJ/Udc1adNfXaFg==
 
-"@openfeature/server-sdk@^1.17.1", "@openfeature/server-sdk@^1.18.0":
+"@openfeature/server-sdk@^1.17.0", "@openfeature/server-sdk@^1.17.1":
   version "1.18.0"
   resolved "https://registry.npmjs.org/@openfeature/server-sdk/-/server-sdk-1.18.0.tgz"
   integrity sha512-uP8nqEGBS58s3iWXx6d8vnJ6ZVt3DACJL4PWADOAuwIS4xXpID91783e9f6zQ0i1ijQpj3yx+3ZuCB2LfQMUMA==

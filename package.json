@@ -2,7 +2,7 @@
   "name": "example-nodejs-typescript",
   "version": "1.0.0",
   "dependencies": {
-    "@devcycle/nodejs-server-sdk": "^1.23.0",
+    "@devcycle/nodejs-server-sdk": "^1.46.1",
     "@openfeature/core": "^1.8.0",
     "@openfeature/js-sdk": "^1.6.1",
     "@openfeature/server-sdk": "^1.18.0",

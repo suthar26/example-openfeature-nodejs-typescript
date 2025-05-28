@@ -20,7 +20,7 @@ const greeting_1 = __importDefault(require("./routes/greeting"));
 const logVariation_1 = require("./utils/logVariation");
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
-        const { devcycleClient } = yield (0, devcycle_1.initializeDevCycleWithOpenFeature)();
+        const devcycleClient = yield (0, devcycle_1.initializeDevCycleWithOpenFeature)();
         const app = (0, express_1.default)();
         app.use(express_1.default.urlencoded({ extended: false }));
         app.use(express_1.default.json());

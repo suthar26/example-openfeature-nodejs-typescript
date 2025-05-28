@@ -9,7 +9,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const devcycle_1 = require("../devcycle");
+const server_sdk_1 = require("@openfeature/server-sdk");
 const greetings = {
     default: {
         header: "Welcome to DevCycle's example app.",
@@ -29,7 +29,7 @@ const greetings = {
     },
 };
 exports.default = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const openFeatureClient = (0, devcycle_1.getOpenFeatureClient)();
+    const openFeatureClient = server_sdk_1.OpenFeature.getClient();
     const step = yield openFeatureClient.getStringValue("example-text", "default", req.user);
     const { header, body } = greetings[step];
     res.set({ "Content-Type": "text/html" });

@@ -1,7 +1,14 @@
-import { Request, Response } from "express";
-import { getOpenFeatureClient } from "../devcycle";
+import { Request, Response } from "express"
+import { OpenFeature } from "@openfeature/server-sdk"
 
-const greetings = {
+type GreetingStep = "default" | "step-1" | "step-2" | "step-3"
+
+interface GreetingContent {
+  header: string
+  body: string
+}
+
+const greetings: Record<GreetingStep, GreetingContent> = {
   default: {
     header: "Welcome to DevCycle's example app.",
     body: "If you got to the example app on your own, follow our README guide to create the Feature and Variables you need to control this app in DevCycle.",
@@ -18,19 +25,19 @@ const greetings = {
     header: "You're getting the hang of things.",
     body: "By creating a new Variation with new Variable values and toggling it on for all users, you've already explored the fundamental concepts within DevCycle. There's still so much more to the platform, so go ahead and complete the onboarding flow and play around with the feature that controls this example in your dashboard.",
   },
-};
+}
 
 export default async (req: Request, res: Response) => {
-  const openFeatureClient = getOpenFeatureClient();
-  const step = await openFeatureClient.getStringValue<keyof typeof greetings>(
+  const openFeatureClient = OpenFeature.getClient()
+  const step = await openFeatureClient.getStringValue<GreetingStep>(
     "example-text",
     "default",
     req.user
-  );
-  const { header, body } = greetings[step];
+  )
+  const { header, body } = greetings[step]
 
-  res.set({ "Content-Type": "text/html" });
+  res.set({ "Content-Type": "text/html" })
   res.send(
     `<h2>${header}</h2><p>${body}</p><p><a href="/variables">All Variables</a></p>`
-  );
-};
+  )
+}

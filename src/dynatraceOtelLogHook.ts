@@ -1,8 +1,8 @@
 // DynatraceOtelLogHook.ts
 import { HookContext, EvaluationDetails, FlagValue } from "@openfeature/js-sdk"
-import { trace, SpanStatusCode } from "@opentelemetry/api"
+import { trace, SpanStatusCode, Tracer } from "@opentelemetry/api"
 
-interface LogAttributes {
+export interface LogAttributes {
   "feature_flag.key": string
   "feature_flag.value_type": string
   "feature_flag.value": FlagValue
@@ -14,7 +14,7 @@ interface LogAttributes {
   "feature_flag.error_message"?: string
 }
 
-interface LogEvent {
+export interface LogEvent {
   body: string
   attributes: LogAttributes
 }
@@ -26,9 +26,9 @@ export interface OtelLogger {
 class DynatraceOtelLogHook {
   private name: string
   private logger: OtelLogger
-  private tracer: any
+  private tracer: Tracer
 
-  constructor(otelLogger: OtelLogger, tracer: any) {
+  constructor(otelLogger: OtelLogger, tracer: Tracer) {
     this.name = "DynatraceOtelLogHook"
     this.logger = otelLogger
     this.tracer = tracer

@@ -35,6 +35,9 @@ class DynatraceOtelLogHook {
   }
 
   before(hookContext: HookContext): void {
+    console.log("before", hookContext)
+    console.log("tracer", this.tracer)
+    console.log("of-trace", trace.getTracer("openfeature-tracer"))
     const span = this.tracer.startSpan(
       `feature_flag.evaluate.${hookContext.flagKey}`
     )

@@ -18,9 +18,11 @@ const express_1 = __importDefault(require("express"));
 const devcycle_1 = require("./devcycle");
 const greeting_1 = __importDefault(require("./routes/greeting"));
 const logVariation_1 = require("./utils/logVariation");
+const server_sdk_1 = require("@openfeature/server-sdk");
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         const devcycleClient = yield (0, devcycle_1.initializeDevCycleWithOpenFeature)();
+        const openFeatureClient = server_sdk_1.OpenFeature.getClient();
         const app = (0, express_1.default)();
         app.use(express_1.default.urlencoded({ extended: false }));
         app.use(express_1.default.json());
@@ -59,7 +61,7 @@ function run() {
          * Log togglebot to the console using the togglebot-spin and togglebot-wink
          * variables to control the output
          */
-        (0, logVariation_1.logVariation)();
+        (0, logVariation_1.logVariation)(devcycleClient, openFeatureClient);
         return app;
     });
 }

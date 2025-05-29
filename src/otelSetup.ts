@@ -5,8 +5,15 @@ import {
   DiagConsoleLogger,
   DiagLogLevel,
   Tracer,
+  AttributeValue,
 } from "@opentelemetry/api"
+import {
+  logs,
+  Logger as ApiLogsLogger,
+  LogAttributes as OtelLogAttributes,
+} from "@opentelemetry/api-logs"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http"
 import { Resource } from "@opentelemetry/resources"
 import { SemanticResourceAttributes } from "@opentelemetry/semantic-conventions"
 import {
@@ -14,6 +21,11 @@ import {
   BatchSpanProcessor,
   SpanProcessor,
 } from "@opentelemetry/sdk-trace-base"
+import {
+  LoggerProvider,
+  BatchLogRecordProcessor,
+  LogRecordProcessor,
+} from "@opentelemetry/sdk-logs"
 import "dotenv/config"
 import { OtelLogger, LogEvent } from "./dynatraceOtelLogHook"
 
@@ -22,57 +34,97 @@ import { OtelLogger, LogEvent } from "./dynatraceOtelLogHook"
 
 const DYNATRACE_ENV_URL = process.env.DYNATRACE_ENV_URL
 const DYNATRACE_API_TOKEN = process.env.DYNATRACE_API_TOKEN
+const USE_LOCAL_ONEAGENT = !DYNATRACE_ENV_URL // Default to OneAgent if DYNATRACE_ENV_URL is not set
 
 let openTelemetryTracer: Tracer | undefined
-let spanProcessor: SpanProcessor | undefined
+let openTelemetrySdkLogger: ApiLogsLogger | undefined
+let traceSpanProcessor: SpanProcessor | undefined
+let logRecordProcessor: LogRecordProcessor | undefined
 
 export function initializeOpenTelemetry() {
-  if (!DYNATRACE_ENV_URL || !DYNATRACE_API_TOKEN) {
+  let tracesExporterUrl: string = ""
+  let logsExporterUrl: string = ""
+  let exporterHeaders: Record<string, string> = {}
+  let configured = false
+
+  if (USE_LOCAL_ONEAGENT) {
+    tracesExporterUrl = "http://localhost:4318/v1/traces"
+    logsExporterUrl = "http://localhost:4318/v1/logs"
     console.log(
-      "Dynatrace credentials not found. OpenTelemetry tracing will be no-op."
+      `Initializing OpenTelemetry for local OneAgent: Traces=${tracesExporterUrl}, Logs=${logsExporterUrl}`
     )
+    configured = true
+  } else if (DYNATRACE_ENV_URL && DYNATRACE_API_TOKEN) {
+    tracesExporterUrl = `${DYNATRACE_ENV_URL}/api/v2/otlp/v1/traces`
+    logsExporterUrl = `${DYNATRACE_ENV_URL}/api/v2/otlp/v1/logs`
+    exporterHeaders["Authorization"] = `Api-Token ${DYNATRACE_API_TOKEN}`
+    console.log(
+      `Initializing OpenTelemetry for direct Dynatrace: Traces=${tracesExporterUrl}, Logs=${logsExporterUrl}`
+    )
+    configured = true
+  } else {
+    console.log(
+      "OpenTelemetry target not configured. Tracing and Logging will be no-op."
+    )
+  }
+
+  if (!configured) {
     return {
       getLogger: (): OtelLogger => ({
         emit: (event: LogEvent) => {
-          console.log("OTel No-Op Logger:", event.body, event.attributes)
+          console.log(
+            "OTel No-Op Logger (Not Configured):",
+            event.body,
+            event.attributes
+          )
         },
       }),
-      getTracer: () => trace.getTracer("no-op-tracer"),
+      getTracer: () => trace.getTracer("no-op-tracer-not-configured"),
     }
   }
 
-  console.log("Initializing OpenTelemetry tracing for Dynatrace...")
-
-  const provider = new BasicTracerProvider({
-    resource: new Resource({
-      [SemanticResourceAttributes.SERVICE_NAME]: "openfeature-service",
-    }),
+  // Shared Resource
+  const resource = new Resource({
+    [SemanticResourceAttributes.SERVICE_NAME]: "openfeature-service",
   })
 
-  const exporter = new OTLPTraceExporter({
-    url: `${DYNATRACE_ENV_URL}/api/v2/otlp/v1/traces`,
-    headers: {
-      Authorization: `Api-Token ${DYNATRACE_API_TOKEN}`,
-    },
+  // ===== Trace Setup =====
+  const traceExporter = new OTLPTraceExporter({
+    url: tracesExporterUrl,
+    headers: exporterHeaders,
   })
+  traceSpanProcessor = new BatchSpanProcessor(traceExporter)
+  const tracerProvider = new BasicTracerProvider({
+    resource: resource,
+  })
+  tracerProvider.addSpanProcessor(traceSpanProcessor)
+  tracerProvider.register() // Register the provider with the API
 
-  spanProcessor = new BatchSpanProcessor(exporter)
-  provider.addSpanProcessor(spanProcessor)
-  provider.register() // Register the provider with the API
+  openTelemetryTracer = tracerProvider.getTracer("openfeature-tracer")
+  console.log("OpenTelemetry TracerProvider configured and registered.")
 
-  openTelemetryTracer = provider.getTracer("openfeature-tracer")
-  console.log(
-    "OpenTelemetry BasicTracerProvider configured and registered with OTLP exporter."
-  )
+  // ===== Log Setup =====
+  const logExporter = new OTLPLogExporter({
+    url: logsExporterUrl,
+    headers: exporterHeaders,
+  })
+  logRecordProcessor = new BatchLogRecordProcessor(logExporter)
+  const loggerProvider = new LoggerProvider({
+    resource: resource,
+  })
+  loggerProvider.addLogRecordProcessor(logRecordProcessor)
+  logs.setGlobalLoggerProvider(loggerProvider) // Register a global logger provider
+  openTelemetrySdkLogger = logs.getLogger("openfeature-service-logger") // Get a named logger
+  console.log("OpenTelemetry LoggerProvider configured and registered.")
 
   return {
     getLogger: (): OtelLogger => ({
       emit: (event: LogEvent) => {
-        console.log(
-          "OTel Logger (Dynatrace Tracing Configured):",
-          event.body,
-          event.attributes
-        )
+        const { body, attributes } = event
+        openTelemetrySdkLogger?.emit({
+          body: body,
+          attributes: attributes as unknown as OtelLogAttributes,
+        })
       },
     }),
     getTracer: () => openTelemetryTracer!,
@@ -80,13 +132,23 @@ export function initializeOpenTelemetry() {
 }
 
 export async function shutdownOpenTelemetry() {
-  if (spanProcessor) {
+  if (traceSpanProcessor) {
     try {
-      await spanProcessor.shutdown()
+      await traceSpanProcessor.shutdown()
       console.log("OpenTelemetry SpanProcessor shutdown successfully.")
     } catch (error) {
       console.error("Error during OpenTelemetry SpanProcessor shutdown:", error)
     }
   }
-  // Note: BasicTracerProvider does not have a dedicated shutdown method itself beyond its processors.
+  if (logRecordProcessor) {
+    try {
+      await logRecordProcessor.shutdown()
+      console.log("OpenTelemetry LogRecordProcessor shutdown successfully.")
+    } catch (error) {
+      console.error(
+        "Error during OpenTelemetry LogRecordProcessor shutdown:",
+        error
+      )
+    }
+  }
 }

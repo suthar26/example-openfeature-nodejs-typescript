@@ -1,12 +1,5 @@
 // otel-setup.js
-import {
-  trace,
-  diag,
-  DiagConsoleLogger,
-  DiagLogLevel,
-  Tracer,
-  AttributeValue,
-} from "@opentelemetry/api"
+import { trace, Tracer } from "@opentelemetry/api"
 import {
   logs,
   Logger as ApiLogsLogger,
@@ -25,6 +18,7 @@ import {
   BatchLogRecordProcessor,
   LogRecordProcessor,
 } from "@opentelemetry/sdk-logs"
+import { EventLoggerProvider } from "@opentelemetry/sdk-events"
 import "dotenv/config"
 import { OtelLogger, LogEvent } from "./dynatraceOtelLogHook"
 import {
@@ -32,6 +26,7 @@ import {
   defaultServiceName,
   resourceFromAttributes,
 } from "@opentelemetry/resources"
+import { events } from "@opentelemetry/api-events"
 
 // For troubleshooting, set OpenTelemetry diagnostics to verbose
 // diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
@@ -54,6 +49,7 @@ export function initializeOpenTelemetry() {
     tracesExporterUrl = `${DYNATRACE_ENV_URL}/api/v2/otlp/v1/traces`
     logsExporterUrl = `${DYNATRACE_ENV_URL}/api/v2/otlp/v1/logs`
     exporterHeaders["Authorization"] = `Api-Token ${DYNATRACE_API_TOKEN}`
+
     console.log(
       `Initializing OpenTelemetry for direct Dynatrace: Traces=${tracesExporterUrl}, Logs=${logsExporterUrl}`
     )
@@ -116,7 +112,12 @@ export function initializeOpenTelemetry() {
     resource: resource,
     processors: [logRecordProcessor],
   })
+  events.setGlobalEventLoggerProvider(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    new EventLoggerProvider(logs.getLoggerProvider() as any)
+  )
   logs.setGlobalLoggerProvider(loggerProvider) // Register a global logger provider
+
   openTelemetrySdkLogger = logs.getLogger("openfeature-service-logger") // Get a named logger
   console.log("OpenTelemetry LoggerProvider configured and registered.")
 
@@ -125,6 +126,7 @@ export function initializeOpenTelemetry() {
       emit: (event: LogEvent) => {
         const { body, attributes } = event
         if (openTelemetrySdkLogger) {
+          console.log("OpenTelemetry LoggerProvider emitting event:", event)
           openTelemetrySdkLogger.emit({
             body: body,
             attributes: attributes as unknown as OtelLogAttributes,

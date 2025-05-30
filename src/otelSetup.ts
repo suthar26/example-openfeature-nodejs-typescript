@@ -14,8 +14,7 @@ import {
 } from "@opentelemetry/api-logs"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http"
-import { Resource } from "@opentelemetry/resources"
-import { SemanticResourceAttributes } from "@opentelemetry/semantic-conventions"
+import { ATTR_SERVICE_NAME } from "@opentelemetry/semantic-conventions"
 import {
   BasicTracerProvider,
   BatchSpanProcessor,
@@ -28,6 +27,11 @@ import {
 } from "@opentelemetry/sdk-logs"
 import "dotenv/config"
 import { OtelLogger, LogEvent } from "./dynatraceOtelLogHook"
+import {
+  defaultResource,
+  defaultServiceName,
+  resourceFromAttributes,
+} from "@opentelemetry/resources"
 
 // For troubleshooting, set OpenTelemetry diagnostics to verbose
 // diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
@@ -76,9 +80,15 @@ export function initializeOpenTelemetry() {
   }
 
   // Shared Resource
-  const resource = new Resource({
-    [SemanticResourceAttributes.SERVICE_NAME]: "openfeature-service",
-  })
+  // const resource = createResource({
+  //   [SemanticResourceAttributes.SERVICE_NAME]: "openfeature-service",
+  // })
+  const resource = defaultResource()
+  resource.merge(
+    resourceFromAttributes({
+      [ATTR_SERVICE_NAME]: "openfeature-service",
+    })
+  )
 
   // ===== Trace Setup =====
   const traceExporter = new OTLPTraceExporter({
@@ -88,9 +98,10 @@ export function initializeOpenTelemetry() {
   traceSpanProcessor = new BatchSpanProcessor(traceExporter)
   const tracerProvider = new BasicTracerProvider({
     resource: resource,
+    spanProcessors: [traceSpanProcessor],
   })
-  tracerProvider.addSpanProcessor(traceSpanProcessor)
-  tracerProvider.register() // Register the provider with the API
+  // tracerProvider.addSpanProcessor(traceSpanProcessor)
+  // tracerProvider.register() // Register the provider with the API
 
   openTelemetryTracer = tracerProvider.getTracer("openfeature-tracer")
   console.log("OpenTelemetry TracerProvider configured and registered.")
@@ -103,8 +114,8 @@ export function initializeOpenTelemetry() {
   logRecordProcessor = new BatchLogRecordProcessor(logExporter)
   const loggerProvider = new LoggerProvider({
     resource: resource,
+    processors: [logRecordProcessor],
   })
-  loggerProvider.addLogRecordProcessor(logRecordProcessor)
   logs.setGlobalLoggerProvider(loggerProvider) // Register a global logger provider
   openTelemetrySdkLogger = logs.getLogger("openfeature-service-logger") // Get a named logger
   console.log("OpenTelemetry LoggerProvider configured and registered.")

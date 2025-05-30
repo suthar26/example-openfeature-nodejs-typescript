@@ -13,22 +13,34 @@ class DynatraceOtelLogHook {
         console.log("before", hookContext);
         console.log("tracer", this.tracer);
         console.log("of-trace", api_1.trace.getTracer("openfeature-tracer"));
-        const span = this.tracer.startSpan(`feature_flag.evaluate.${hookContext.flagKey}`);
+        const span = this.tracer.startSpan(`feature_flag.evaluate.${hookContext.flagKey}`, {
+            kind: api_1.SpanKind.SERVER,
+        });
         if (span) {
-            span.setAttribute("feature_flag.key", hookContext.flagKey);
-            span.setAttribute("feature_flag.value_type", hookContext.flagValueType);
+            span.setAttributes({
+                "feature_flag.key": hookContext.flagKey,
+                "feature_flag.value_type": hookContext.flagValueType,
+            });
             if ((_a = hookContext.clientMetadata) === null || _a === void 0 ? void 0 : _a.name) {
-                span.setAttribute("openfeature.client.name", hookContext.clientMetadata.name);
+                span.setAttributes({
+                    "openfeature.client.name": hookContext.clientMetadata.name,
+                });
             }
             if ((_b = hookContext.providerMetadata) === null || _b === void 0 ? void 0 : _b.name) {
-                span.setAttribute("openfeature.provider.name", hookContext.providerMetadata.name);
+                span.setAttributes({
+                    "openfeature.provider.name": "devcycle",
+                });
             }
         }
     }
-    after(hookContext, evaluationDetails) {
+    finally(hookContext, evaluationDetails) {
+        console.log("finally", hookContext);
+        console.log("evaluationDetails", evaluationDetails);
         const { flagKey, flagValueType, clientMetadata, providerMetadata } = hookContext;
         const { value, variant, reason, errorCode, errorMessage } = evaluationDetails;
-        const span = this.tracer.startSpan(`feature_flag.evaluated.${flagKey}`);
+        const span = this.tracer.startSpan(`feature_flag.evaluated.${flagKey}`, {
+            kind: api_1.SpanKind.SERVER,
+        });
         if (span) {
             const logAttributes = {
                 "feature_flag.key": flagKey,
@@ -38,43 +50,58 @@ class DynatraceOtelLogHook {
                 "feature_flag.reason": reason,
                 "openfeature.client.name": clientMetadata === null || clientMetadata === void 0 ? void 0 : clientMetadata.name,
                 "openfeature.provider.name": providerMetadata === null || providerMetadata === void 0 ? void 0 : providerMetadata.name,
+                "trace.id": span.spanContext().traceId,
+                "span.id": span.spanContext().spanId,
             };
             if (errorCode) {
                 logAttributes["feature_flag.error_code"] = errorCode;
-                span.setAttribute("feature_flag.error_code", errorCode);
+                span.setAttributes({
+                    "feature_flag.error_code": errorCode,
+                });
             }
             if (errorMessage) {
                 logAttributes["feature_flag.error_message"] = errorMessage;
-                span.setAttribute("feature_flag.error_message", errorMessage);
+                span.setAttributes({
+                    "feature_flag.error_message": errorMessage,
+                });
             }
-            span.setAttribute("feature_flag.value", String(value));
+            span.setAttributes({
+                "feature_flag.value": String(value),
+                "feature_flag.reason": reason || "",
+            });
             if (variant) {
-                span.setAttribute("feature_flag.variant", variant);
+                span.setAttributes({
+                    "feature_flag.variant": variant,
+                });
             }
-            span.setAttribute("feature_flag.reason", reason || "");
             this.logger.emit({
                 body: `Feature flag '${flagKey}' evaluated. Reason: ${reason}.`,
                 attributes: logAttributes,
             });
-            span.end();
         }
     }
     error(hookContext, err) {
-        const span = this.tracer.startSpan(`feature_flag.error.${hookContext.flagKey}`);
+        const { flagKey } = hookContext;
+        const span = this.tracer.startSpan(`feature_flag.error.${flagKey}`, {
+            kind: api_1.SpanKind.SERVER,
+        });
         if (span) {
-            span.setAttribute("feature_flag.key", hookContext.flagKey);
-            span.setAttribute("error.message", err.message);
-            span.setAttribute("error.stack", err.stack || "");
+            span.setAttributes({
+                "feature_flag.key": flagKey,
+                "error.message": err.message,
+                "error.stack": err.stack || "",
+            });
             span.setStatus({ code: api_1.SpanStatusCode.ERROR, message: err.message });
-            span.end();
             const logAttributes = {
-                "feature_flag.key": hookContext.flagKey,
+                "feature_flag.key": flagKey,
                 "feature_flag.value_type": "error",
                 "feature_flag.value": false,
                 "feature_flag.error_message": err.message,
+                "trace.id": span.spanContext().traceId,
+                "span.id": span.spanContext().spanId,
             };
             this.logger.emit({
-                body: `Error during feature flag '${hookContext.flagKey}' evaluation.`,
+                body: `Error during feature flag '${flagKey}' evaluation.`,
                 attributes: logAttributes,
             });
         }

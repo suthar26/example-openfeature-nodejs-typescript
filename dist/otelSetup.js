@@ -15,16 +15,15 @@ const api_1 = require("@opentelemetry/api");
 const api_logs_1 = require("@opentelemetry/api-logs");
 const exporter_trace_otlp_http_1 = require("@opentelemetry/exporter-trace-otlp-http");
 const exporter_logs_otlp_http_1 = require("@opentelemetry/exporter-logs-otlp-http");
-const resources_1 = require("@opentelemetry/resources");
 const semantic_conventions_1 = require("@opentelemetry/semantic-conventions");
 const sdk_trace_base_1 = require("@opentelemetry/sdk-trace-base");
 const sdk_logs_1 = require("@opentelemetry/sdk-logs");
 require("dotenv/config");
+const resources_1 = require("@opentelemetry/resources");
 // For troubleshooting, set OpenTelemetry diagnostics to verbose
 // diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
 const DYNATRACE_ENV_URL = process.env.DYNATRACE_ENV_URL;
 const DYNATRACE_API_TOKEN = process.env.DYNATRACE_API_TOKEN;
-const USE_LOCAL_ONEAGENT = !DYNATRACE_ENV_URL; // Default to OneAgent if DYNATRACE_ENV_URL is not set
 let openTelemetryTracer;
 let openTelemetrySdkLogger;
 let traceSpanProcessor;
@@ -34,13 +33,7 @@ function initializeOpenTelemetry() {
     let logsExporterUrl = "";
     let exporterHeaders = {};
     let configured = false;
-    if (USE_LOCAL_ONEAGENT) {
-        tracesExporterUrl = "http://localhost:4318/v1/traces";
-        logsExporterUrl = "http://localhost:4318/v1/logs";
-        console.log(`Initializing OpenTelemetry for local OneAgent: Traces=${tracesExporterUrl}, Logs=${logsExporterUrl}`);
-        configured = true;
-    }
-    else if (DYNATRACE_ENV_URL && DYNATRACE_API_TOKEN) {
+    if (DYNATRACE_ENV_URL && DYNATRACE_API_TOKEN) {
         tracesExporterUrl = `${DYNATRACE_ENV_URL}/api/v2/otlp/v1/traces`;
         logsExporterUrl = `${DYNATRACE_ENV_URL}/api/v2/otlp/v1/logs`;
         exporterHeaders["Authorization"] = `Api-Token ${DYNATRACE_API_TOKEN}`;
@@ -61,9 +54,13 @@ function initializeOpenTelemetry() {
         };
     }
     // Shared Resource
-    const resource = new resources_1.Resource({
-        [semantic_conventions_1.SemanticResourceAttributes.SERVICE_NAME]: "openfeature-service",
-    });
+    // const resource = createResource({
+    //   [SemanticResourceAttributes.SERVICE_NAME]: "openfeature-service",
+    // })
+    const resource = (0, resources_1.defaultResource)();
+    resource.merge((0, resources_1.resourceFromAttributes)({
+        [semantic_conventions_1.ATTR_SERVICE_NAME]: "openfeature-service",
+    }));
     // ===== Trace Setup =====
     const traceExporter = new exporter_trace_otlp_http_1.OTLPTraceExporter({
         url: tracesExporterUrl,
@@ -72,9 +69,10 @@ function initializeOpenTelemetry() {
     traceSpanProcessor = new sdk_trace_base_1.BatchSpanProcessor(traceExporter);
     const tracerProvider = new sdk_trace_base_1.BasicTracerProvider({
         resource: resource,
+        spanProcessors: [traceSpanProcessor],
     });
-    tracerProvider.addSpanProcessor(traceSpanProcessor);
-    tracerProvider.register(); // Register the provider with the API
+    // tracerProvider.addSpanProcessor(traceSpanProcessor)
+    // tracerProvider.register() // Register the provider with the API
     openTelemetryTracer = tracerProvider.getTracer("openfeature-tracer");
     console.log("OpenTelemetry TracerProvider configured and registered.");
     // ===== Log Setup =====
@@ -85,8 +83,8 @@ function initializeOpenTelemetry() {
     logRecordProcessor = new sdk_logs_1.BatchLogRecordProcessor(logExporter);
     const loggerProvider = new sdk_logs_1.LoggerProvider({
         resource: resource,
+        processors: [logRecordProcessor],
     });
-    loggerProvider.addLogRecordProcessor(logRecordProcessor);
     api_logs_1.logs.setGlobalLoggerProvider(loggerProvider); // Register a global logger provider
     openTelemetrySdkLogger = api_logs_1.logs.getLogger("openfeature-service-logger"); // Get a named logger
     console.log("OpenTelemetry LoggerProvider configured and registered.");

@@ -124,13 +124,22 @@ export function initializeOpenTelemetry() {
     getLogger: (): OtelLogger => ({
       emit: (event: LogEvent) => {
         const { body, attributes } = event
-        openTelemetrySdkLogger?.emit({
-          body: body,
-          attributes: attributes as unknown as OtelLogAttributes,
-        })
+        if (openTelemetrySdkLogger) {
+          openTelemetrySdkLogger.emit({
+            body: body,
+            attributes: attributes as unknown as OtelLogAttributes,
+          })
+        } else {
+          console.log("OpenTelemetry LoggerProvider not configured.")
+        }
       },
     }),
-    getTracer: () => openTelemetryTracer!,
+    getTracer: () => {
+      if (!openTelemetryTracer) {
+        throw new Error("OpenTelemetry Tracer not configured.")
+      }
+      return openTelemetryTracer
+    },
   }
 }
 

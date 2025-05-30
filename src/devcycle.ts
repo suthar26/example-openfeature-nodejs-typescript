@@ -1,4 +1,4 @@
-import { initializeDevCycle, DevCycleClient } from "@devcycle/nodejs-server-sdk"
+import { initializeDevCycle } from "@devcycle/nodejs-server-sdk"
 import { OpenFeature } from "@openfeature/server-sdk"
 import { initializeOpenTelemetry } from "./otelSetup"
 import { DynatraceOtelLogHook } from "./dynatraceOtelLogHook"
@@ -14,12 +14,12 @@ const logger = getLogger()
 const tracer = getTracer()
 
 const dynatraceLogHook = new DynatraceOtelLogHook(logger, tracer)
-OpenFeature.addHooks(dynatraceLogHook)
 
 export async function initializeDevCycleWithOpenFeature() {
   const devcycleClient = initializeDevCycle(DEVCYCLE_SERVER_SDK_KEY as string, {
-    logLevel: "debug",
+    logLevel: "info",
   })
+  OpenFeature.addHooks(dynatraceLogHook)
 
   // Pass the DevCycle OpenFeature Provider to OpenFeature, wait for devcycle to be initialized
   await OpenFeature.setProviderAndWait(

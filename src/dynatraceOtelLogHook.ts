@@ -43,9 +43,9 @@ class DynatraceOtelLogHook implements Hook {
   }
 
   before(hookContext: BeforeHookContext) {
-    console.log("before", hookContext)
-    console.log("tracer", this.tracer)
-    console.log("of-trace", trace.getTracer("openfeature-tracer"))
+    // console.log("before", hookContext)
+    // console.log("tracer", this.tracer)
+    // console.log("of-trace", trace.getTracer("openfeature-tracer"))
     const span = this.tracer.startSpan(
       `feature_flag.evaluate.${hookContext.flagKey}`,
       {
@@ -74,8 +74,8 @@ class DynatraceOtelLogHook implements Hook {
     hookContext: HookContext,
     evaluationDetails: EvaluationDetails<FlagValue>
   ): void {
-    console.log("finally", hookContext)
-    console.log("evaluationDetails", evaluationDetails)
+    // console.log("finally", hookContext)
+    // console.log("evaluationDetails", evaluationDetails)
     const { flagKey, flagValueType, clientMetadata, providerMetadata } =
       hookContext
     const { value, variant, reason, errorCode, errorMessage } =

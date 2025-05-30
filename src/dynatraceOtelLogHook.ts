@@ -1,12 +1,12 @@
 // DynatraceOtelLogHook.ts
-import { HookContext, EvaluationDetails, FlagValue } from "@openfeature/js-sdk"
 import {
-  trace,
-  SpanStatusCode,
-  Tracer,
-  SpanKind,
-  Span,
-} from "@opentelemetry/api"
+  HookContext,
+  EvaluationDetails,
+  FlagValue,
+  BeforeHookContext,
+} from "@openfeature/core"
+import { Hook } from "@openfeature/server-sdk"
+import { trace, SpanStatusCode, Tracer, SpanKind } from "@opentelemetry/api"
 
 export interface LogAttributes {
   "feature_flag.key": string
@@ -31,11 +31,7 @@ export interface OtelLogger {
   emit(event: LogEvent): void
 }
 
-export type HookContextWithSpan = HookContext & {
-  span: Span
-}
-
-class DynatraceOtelLogHook {
+class DynatraceOtelLogHook implements Hook {
   private name: string
   private logger: OtelLogger
   private tracer: Tracer
@@ -46,7 +42,7 @@ class DynatraceOtelLogHook {
     this.tracer = tracer
   }
 
-  before(hookContext: HookContext) {
+  before(hookContext: BeforeHookContext) {
     console.log("before", hookContext)
     console.log("tracer", this.tracer)
     console.log("of-trace", trace.getTracer("openfeature-tracer"))
@@ -72,23 +68,21 @@ class DynatraceOtelLogHook {
         })
       }
     }
-    return {
-      ...hookContext,
-      span,
-    }
   }
 
   finally(
-    hookContext: HookContextWithSpan,
+    hookContext: HookContext,
     evaluationDetails: EvaluationDetails<FlagValue>
   ): void {
     console.log("finally", hookContext)
     console.log("evaluationDetails", evaluationDetails)
-    hookContext.span.end()
-    const { flagKey, flagValueType, clientMetadata, providerMetadata, span } =
+    const { flagKey, flagValueType, clientMetadata, providerMetadata } =
       hookContext
     const { value, variant, reason, errorCode, errorMessage } =
       evaluationDetails
+    const span = this.tracer.startSpan(`feature_flag.evaluated.${flagKey}`, {
+      kind: SpanKind.SERVER,
+    })
 
     if (span) {
       const logAttributes: LogAttributes = {
@@ -130,31 +124,33 @@ class DynatraceOtelLogHook {
         body: `Feature flag '${flagKey}' evaluated. Reason: ${reason}.`,
         attributes: logAttributes,
       })
-
-      span.end()
     }
   }
 
-  error(hookContext: HookContext, err: Error): void {
-    const span = this.tracer.startSpan(
-      `feature_flag.error.${hookContext.flagKey}`
-    )
+  error(hookContext: HookContext, err: Error) {
+    const { flagKey } = hookContext
+    const span = this.tracer.startSpan(`feature_flag.error.${flagKey}`, {
+      kind: SpanKind.SERVER,
+    })
     if (span) {
-      span.setAttribute("feature_flag.key", hookContext.flagKey)
-      span.setAttribute("error.message", err.message)
-      span.setAttribute("error.stack", err.stack || "")
+      span.setAttributes({
+        "feature_flag.key": flagKey,
+        "error.message": err.message,
+        "error.stack": err.stack || "",
+      })
       span.setStatus({ code: SpanStatusCode.ERROR, message: err.message })
-      span.end()
 
       const logAttributes: LogAttributes = {
-        "feature_flag.key": hookContext.flagKey,
+        "feature_flag.key": flagKey,
         "feature_flag.value_type": "error",
         "feature_flag.value": false,
         "feature_flag.error_message": err.message,
+        "trace.id": span.spanContext().traceId,
+        "span.id": span.spanContext().spanId,
       }
 
       this.logger.emit({
-        body: `Error during feature flag '${hookContext.flagKey}' evaluation.`,
+        body: `Error during feature flag '${flagKey}' evaluation.`,
         attributes: logAttributes,
       })
     }

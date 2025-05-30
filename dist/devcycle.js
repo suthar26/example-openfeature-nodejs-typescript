@@ -22,12 +22,12 @@ const { getLogger, getTracer } = (0, otelSetup_1.initializeOpenTelemetry)();
 const logger = getLogger();
 const tracer = getTracer();
 const dynatraceLogHook = new dynatraceOtelLogHook_1.DynatraceOtelLogHook(logger, tracer);
-server_sdk_1.OpenFeature.addHooks(dynatraceLogHook);
 function initializeDevCycleWithOpenFeature() {
     return __awaiter(this, void 0, void 0, function* () {
         const devcycleClient = (0, nodejs_server_sdk_1.initializeDevCycle)(DEVCYCLE_SERVER_SDK_KEY, {
-            logLevel: "debug",
+            logLevel: "info",
         });
+        server_sdk_1.OpenFeature.addHooks(dynatraceLogHook);
         // Pass the DevCycle OpenFeature Provider to OpenFeature, wait for devcycle to be initialized
         yield server_sdk_1.OpenFeature.setProviderAndWait(yield devcycleClient.getOpenFeatureProvider());
         return devcycleClient;

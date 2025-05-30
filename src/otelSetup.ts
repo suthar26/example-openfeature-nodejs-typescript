@@ -27,6 +27,7 @@ import {
   resourceFromAttributes,
 } from "@opentelemetry/resources"
 import { events } from "@opentelemetry/api-events"
+import * as opentelemetry from "@opentelemetry/sdk-node"
 
 // For troubleshooting, set OpenTelemetry diagnostics to verbose
 // diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG);
@@ -119,7 +120,16 @@ export function initializeOpenTelemetry() {
   logs.setGlobalLoggerProvider(loggerProvider) // Register a global logger provider
 
   openTelemetrySdkLogger = logs.getLogger("openfeature-service-logger") // Get a named logger
+
   console.log("OpenTelemetry LoggerProvider configured and registered.")
+
+  const sdk = new opentelemetry.NodeSDK({
+    resource: resource,
+    traceExporter: traceExporter,
+    spanProcessors: [traceSpanProcessor],
+    logRecordProcessors: [logRecordProcessor],
+  })
+  sdk.start()
 
   return {
     getLogger: (): OtelLogger => ({

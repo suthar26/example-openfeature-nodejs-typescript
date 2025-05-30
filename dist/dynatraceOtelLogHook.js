@@ -10,9 +10,9 @@ class DynatraceOtelLogHook {
     }
     before(hookContext) {
         var _a, _b;
-        console.log("before", hookContext);
-        console.log("tracer", this.tracer);
-        console.log("of-trace", api_1.trace.getTracer("openfeature-tracer"));
+        // console.log("before", hookContext)
+        // console.log("tracer", this.tracer)
+        // console.log("of-trace", trace.getTracer("openfeature-tracer"))
         const span = this.tracer.startSpan(`feature_flag.evaluate.${hookContext.flagKey}`, {
             kind: api_1.SpanKind.SERVER,
         });
@@ -34,8 +34,8 @@ class DynatraceOtelLogHook {
         }
     }
     finally(hookContext, evaluationDetails) {
-        console.log("finally", hookContext);
-        console.log("evaluationDetails", evaluationDetails);
+        // console.log("finally", hookContext)
+        // console.log("evaluationDetails", evaluationDetails)
         const { flagKey, flagValueType, clientMetadata, providerMetadata } = hookContext;
         const { value, variant, reason, errorCode, errorMessage } = evaluationDetails;
         const span = this.tracer.startSpan(`feature_flag.evaluated.${flagKey}`, {

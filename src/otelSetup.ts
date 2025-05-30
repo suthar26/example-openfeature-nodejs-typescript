@@ -34,7 +34,6 @@ import { OtelLogger, LogEvent } from "./dynatraceOtelLogHook"
 
 const DYNATRACE_ENV_URL = process.env.DYNATRACE_ENV_URL
 const DYNATRACE_API_TOKEN = process.env.DYNATRACE_API_TOKEN
-const USE_LOCAL_ONEAGENT = !DYNATRACE_ENV_URL // Default to OneAgent if DYNATRACE_ENV_URL is not set
 
 let openTelemetryTracer: Tracer | undefined
 let openTelemetrySdkLogger: ApiLogsLogger | undefined
@@ -47,14 +46,7 @@ export function initializeOpenTelemetry() {
   let exporterHeaders: Record<string, string> = {}
   let configured = false
 
-  if (USE_LOCAL_ONEAGENT) {
-    tracesExporterUrl = "http://localhost:4318/v1/traces"
-    logsExporterUrl = "http://localhost:4318/v1/logs"
-    console.log(
-      `Initializing OpenTelemetry for local OneAgent: Traces=${tracesExporterUrl}, Logs=${logsExporterUrl}`
-    )
-    configured = true
-  } else if (DYNATRACE_ENV_URL && DYNATRACE_API_TOKEN) {
+  if (DYNATRACE_ENV_URL && DYNATRACE_API_TOKEN) {
     tracesExporterUrl = `${DYNATRACE_ENV_URL}/api/v2/otlp/v1/traces`
     logsExporterUrl = `${DYNATRACE_ENV_URL}/api/v2/otlp/v1/logs`
     exporterHeaders["Authorization"] = `Api-Token ${DYNATRACE_API_TOKEN}`

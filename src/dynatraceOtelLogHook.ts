@@ -1,4 +1,3 @@
-// DynatraceOtelLogHook.ts
 import {
   HookContext,
   EvaluationDetails,
@@ -6,7 +5,13 @@ import {
   BeforeHookContext,
 } from "@openfeature/core"
 import { Hook } from "@openfeature/server-sdk"
-import { trace, SpanStatusCode, Tracer, SpanKind } from "@opentelemetry/api"
+import {
+  trace,
+  SpanStatusCode,
+  Tracer,
+  SpanKind,
+  Span,
+} from "@opentelemetry/api"
 
 export interface LogAttributes {
   "feature_flag.key": string
@@ -35,6 +40,7 @@ class DynatraceOtelLogHook implements Hook {
   private name: string
   private logger: OtelLogger
   private tracer: Tracer
+  private spans: WeakMap<HookContext, Span> = new WeakMap()
 
   constructor(otelLogger: OtelLogger, tracer: Tracer) {
     this.name = "DynatraceOtelLogHook"
@@ -43,11 +49,8 @@ class DynatraceOtelLogHook implements Hook {
   }
 
   before(hookContext: BeforeHookContext) {
-    // console.log("before", hookContext)
-    // console.log("tracer", this.tracer)
-    // console.log("of-trace", trace.getTracer("openfeature-tracer"))
     const span = this.tracer.startSpan(
-      `feature_flag.evaluate.${hookContext.flagKey}`,
+      `feature_flag_evaluation.${hookContext.flagKey}`,
       {
         kind: SpanKind.SERVER,
       }
@@ -68,21 +71,18 @@ class DynatraceOtelLogHook implements Hook {
         })
       }
     }
+    this.spans.set(hookContext, span)
   }
 
   finally(
     hookContext: HookContext,
     evaluationDetails: EvaluationDetails<FlagValue>
   ): void {
-    // console.log("finally", hookContext)
-    // console.log("evaluationDetails", evaluationDetails)
     const { flagKey, flagValueType, clientMetadata, providerMetadata } =
       hookContext
     const { value, variant, reason, errorCode, errorMessage } =
       evaluationDetails
-    const span = this.tracer.startSpan(`feature_flag.evaluated.${flagKey}`, {
-      kind: SpanKind.SERVER,
-    })
+    const span = this.spans.get(hookContext)
 
     if (span) {
       const logAttributes: LogAttributes = {
@@ -124,14 +124,13 @@ class DynatraceOtelLogHook implements Hook {
         body: `Feature flag '${flagKey}' evaluated. Reason: ${reason}.`,
         attributes: logAttributes,
       })
+      span.end()
     }
   }
 
   error(hookContext: HookContext, err: Error) {
     const { flagKey } = hookContext
-    const span = this.tracer.startSpan(`feature_flag.error.${flagKey}`, {
-      kind: SpanKind.SERVER,
-    })
+    const span = this.spans.get(hookContext)
     if (span) {
       span.setAttributes({
         "feature_flag.key": flagKey,
@@ -153,6 +152,7 @@ class DynatraceOtelLogHook implements Hook {
         body: `Error during feature flag '${flagKey}' evaluation.`,
         attributes: logAttributes,
       })
+      span.end()
     }
   }
 }

@@ -18,7 +18,7 @@ const DEVCYCLE_SERVER_SDK_KEY = process.env.DEVCYCLE_SERVER_SDK_KEY;
 if (!DEVCYCLE_SERVER_SDK_KEY) {
     throw new Error("DEVCYCLE_SERVER_SDK_KEY environment variable is required");
 }
-const { getLogger, getTracer } = (0, otelSetup_1.initializeOpenTelemetry)();
+const { getLogger, getTracer } = otelSetup_1.otelSetup;
 const logger = getLogger();
 const tracer = getTracer();
 const dynatraceLogHook = new dynatraceOtelLogHook_1.DynatraceOtelLogHook(logger, tracer);

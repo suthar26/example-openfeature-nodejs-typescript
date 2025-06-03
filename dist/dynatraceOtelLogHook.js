@@ -4,16 +4,14 @@ exports.DynatraceOtelLogHook = void 0;
 const api_1 = require("@opentelemetry/api");
 class DynatraceOtelLogHook {
     constructor(otelLogger, tracer) {
+        this.spans = new WeakMap();
         this.name = "DynatraceOtelLogHook";
         this.logger = otelLogger;
         this.tracer = tracer;
     }
     before(hookContext) {
         var _a, _b;
-        // console.log("before", hookContext)
-        // console.log("tracer", this.tracer)
-        // console.log("of-trace", trace.getTracer("openfeature-tracer"))
-        const span = this.tracer.startSpan(`feature_flag.evaluate.${hookContext.flagKey}`, {
+        const span = this.tracer.startSpan(`feature_flag_evaluation.${hookContext.flagKey}`, {
             kind: api_1.SpanKind.SERVER,
         });
         if (span) {
@@ -32,15 +30,12 @@ class DynatraceOtelLogHook {
                 });
             }
         }
+        this.spans.set(hookContext, span);
     }
     finally(hookContext, evaluationDetails) {
-        // console.log("finally", hookContext)
-        // console.log("evaluationDetails", evaluationDetails)
         const { flagKey, flagValueType, clientMetadata, providerMetadata } = hookContext;
         const { value, variant, reason, errorCode, errorMessage } = evaluationDetails;
-        const span = this.tracer.startSpan(`feature_flag.evaluated.${flagKey}`, {
-            kind: api_1.SpanKind.SERVER,
-        });
+        const span = this.spans.get(hookContext);
         if (span) {
             const logAttributes = {
                 "feature_flag.key": flagKey,
@@ -78,13 +73,12 @@ class DynatraceOtelLogHook {
                 body: `Feature flag '${flagKey}' evaluated. Reason: ${reason}.`,
                 attributes: logAttributes,
             });
+            span.end();
         }
     }
     error(hookContext, err) {
         const { flagKey } = hookContext;
-        const span = this.tracer.startSpan(`feature_flag.error.${flagKey}`, {
-            kind: api_1.SpanKind.SERVER,
-        });
+        const span = this.spans.get(hookContext);
         if (span) {
             span.setAttributes({
                 "feature_flag.key": flagKey,
@@ -104,6 +98,7 @@ class DynatraceOtelLogHook {
                 body: `Error during feature flag '${flagKey}' evaluation.`,
                 attributes: logAttributes,
             });
+            span.end();
         }
     }
 }

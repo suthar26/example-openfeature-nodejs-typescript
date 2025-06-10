@@ -25,7 +25,6 @@ class DynatraceOtelLogHook implements Hook {
   }
 
   before(hookContext: BeforeHookContext) {
-    console.log("tracer running?", this.tracer)
     const span = this.tracer.startSpan(
       `feature_flag_evaluation.${hookContext.flagKey}`,
       {

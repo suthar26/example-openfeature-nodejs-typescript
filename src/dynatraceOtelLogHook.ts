@@ -12,43 +12,20 @@ import {
   SpanKind,
   Span,
 } from "@opentelemetry/api"
-
-export interface LogAttributes {
-  "feature_flag.key": string
-  "feature_flag.value_type": string
-  "feature_flag.value": FlagValue
-  "feature_flag.variant"?: string
-  "feature_flag.reason"?: string
-  "openfeature.client.name"?: string
-  "openfeature.provider.name"?: string
-  "feature_flag.error_code"?: string
-  "feature_flag.error_message"?: string
-  "trace.id"?: string
-  "span.id"?: string
-}
-
-export interface LogEvent {
-  body: string
-  attributes: LogAttributes
-}
-
-export interface OtelLogger {
-  emit(event: LogEvent): void
-}
+import { appMetadata } from "./otelSetup" // Import app metadata
 
 class DynatraceOtelLogHook implements Hook {
   private name: string
-  private logger: OtelLogger
   private tracer: Tracer
   private spans: WeakMap<HookContext, Span> = new WeakMap()
 
-  constructor(otelLogger: OtelLogger, tracer: Tracer) {
+  constructor(tracer: Tracer) {
     this.name = "DynatraceOtelLogHook"
-    this.logger = otelLogger
     this.tracer = tracer
   }
 
   before(hookContext: BeforeHookContext) {
+    console.log("tracer running?", this.tracer)
     const span = this.tracer.startSpan(
       `feature_flag_evaluation.${hookContext.flagKey}`,
       {
@@ -59,6 +36,9 @@ class DynatraceOtelLogHook implements Hook {
       span.setAttributes({
         "feature_flag.key": hookContext.flagKey,
         "feature_flag.value_type": hookContext.flagValueType,
+        "feature_flag.flagset": hookContext.flagKey,
+        "feature_flag.project": appMetadata.project,
+        "feature_flag.environment": appMetadata._environment,
       })
       if (hookContext.clientMetadata?.name) {
         span.setAttributes({
@@ -78,33 +58,17 @@ class DynatraceOtelLogHook implements Hook {
     hookContext: HookContext,
     evaluationDetails: EvaluationDetails<FlagValue>
   ): void {
-    const { flagKey, flagValueType, clientMetadata, providerMetadata } =
-      hookContext
     const { value, variant, reason, errorCode, errorMessage } =
       evaluationDetails
     const span = this.spans.get(hookContext)
 
     if (span) {
-      const logAttributes: LogAttributes = {
-        "feature_flag.key": flagKey,
-        "feature_flag.value_type": flagValueType,
-        "feature_flag.value": value,
-        "feature_flag.variant": variant,
-        "feature_flag.reason": reason,
-        "openfeature.client.name": clientMetadata?.name,
-        "openfeature.provider.name": providerMetadata?.name,
-        "trace.id": span.spanContext().traceId,
-        "span.id": span.spanContext().spanId,
-      }
-
       if (errorCode) {
-        logAttributes["feature_flag.error_code"] = errorCode
         span.setAttributes({
           "feature_flag.error_code": errorCode,
         })
       }
       if (errorMessage) {
-        logAttributes["feature_flag.error_message"] = errorMessage
         span.setAttributes({
           "feature_flag.error_message": errorMessage,
         })
@@ -119,11 +83,6 @@ class DynatraceOtelLogHook implements Hook {
           "feature_flag.variant": variant,
         })
       }
-
-      this.logger.emit({
-        body: `Feature flag '${flagKey}' evaluated. Reason: ${reason}.`,
-        attributes: logAttributes,
-      })
       span.end()
     }
   }
@@ -136,22 +95,12 @@ class DynatraceOtelLogHook implements Hook {
         "feature_flag.key": flagKey,
         "error.message": err.message,
         "error.stack": err.stack || "",
+        // App metadata
+        "app.name": appMetadata.name,
+        "app.version": appMetadata.version,
+        "app.environment": appMetadata._environment,
       })
       span.setStatus({ code: SpanStatusCode.ERROR, message: err.message })
-
-      const logAttributes: LogAttributes = {
-        "feature_flag.key": flagKey,
-        "feature_flag.value_type": "error",
-        "feature_flag.value": false,
-        "feature_flag.error_message": err.message,
-        "trace.id": span.spanContext().traceId,
-        "span.id": span.spanContext().spanId,
-      }
-
-      this.logger.emit({
-        body: `Error during feature flag '${flagKey}' evaluation.`,
-        attributes: logAttributes,
-      })
       span.end()
     }
   }

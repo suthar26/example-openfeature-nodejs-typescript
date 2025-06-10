@@ -18,10 +18,9 @@ const DEVCYCLE_SERVER_SDK_KEY = process.env.DEVCYCLE_SERVER_SDK_KEY;
 if (!DEVCYCLE_SERVER_SDK_KEY) {
     throw new Error("DEVCYCLE_SERVER_SDK_KEY environment variable is required");
 }
-const { getLogger, getTracer } = otelSetup_1.otelSetup;
-const logger = getLogger();
+const { getTracer } = otelSetup_1.otelSetup;
 const tracer = getTracer();
-const dynatraceLogHook = new dynatraceOtelLogHook_1.DynatraceOtelLogHook(logger, tracer);
+const dynatraceLogHook = new dynatraceOtelLogHook_1.DynatraceOtelLogHook(tracer);
 function initializeDevCycleWithOpenFeature() {
     return __awaiter(this, void 0, void 0, function* () {
         const devcycleClient = (0, nodejs_server_sdk_1.initializeDevCycle)(DEVCYCLE_SERVER_SDK_KEY, {

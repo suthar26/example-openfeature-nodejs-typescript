@@ -1,13 +1,18 @@
 // otel-setup.js
-import { trace, metrics as apiMetrics } from "@opentelemetry/api"
-import {
-  logs,
-  Logger as ApiLogsLogger,
-  LogAttributes as OtelLogAttributes,
-} from "@opentelemetry/api-logs"
+//
+// OpenTelemetry Configuration with Local OTLP Fallback
+//
+// Environment Variables:
+// - USE_LOCAL_OTLP: Set to 'true' or '1' to enable local OTLP mode
+// - LOCAL_OTLP_PORT: Port for local OTLP endpoint (default: 14499)
+// - DYNATRACE_ENV_URL: Dynatrace environment URL (fallback)
+// - DYNATRACE_API_TOKEN: Dynatrace API token (fallback)
+// - OTEL_SERVICE_NAME: Override service name (default: from package.json)
+// - OTEL_SERVICE_VERSION: Override service version (default: from package.json)
+// - NODE_ENV or ENVIRONMENT: Environment name for metadata
+//
+import { trace, Tracer } from "@opentelemetry/api"
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto"
-import { OTLPMetricExporter } from "@opentelemetry/exporter-metrics-otlp-proto"
-import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http"
 import {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
@@ -16,78 +21,92 @@ import {
   BatchSpanProcessor,
   SpanProcessor,
 } from "@opentelemetry/sdk-trace-base"
-import {
-  LoggerProvider,
-  BatchLogRecordProcessor,
-  LogRecordProcessor,
-} from "@opentelemetry/sdk-logs"
-import {
-  PeriodicExportingMetricReader,
-  AggregationTemporality,
-} from "@opentelemetry/sdk-metrics"
+
 import "dotenv/config"
-import { OtelLogger, LogEvent } from "./dynatraceOtelLogHook"
 import {
   defaultResource,
-  resourceFromAttributes,
   emptyResource,
+  resourceFromAttributes,
 } from "@opentelemetry/resources"
 import * as opentelemetry from "@opentelemetry/sdk-node"
 import fs from "fs"
 import { HttpInstrumentation } from "@opentelemetry/instrumentation-http"
 import { ExpressInstrumentation } from "@opentelemetry/instrumentation-express"
 
-// For troubleshooting, set OpenTelemetry diagnostics to verbose
-// diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG)
+let packageInfo: { name?: string; version?: string } = {}
+try {
+  const packageJsonPath = "./package.json"
+  const packageJsonContent = fs.readFileSync(packageJsonPath, "utf-8")
+  packageInfo = JSON.parse(packageJsonContent)
+} catch (error) {
+  console.warn(
+    "Could not read package.json:",
+    error instanceof Error ? error.message : error
+  )
+}
 
 const DYNATRACE_ENV_URL = process.env.DYNATRACE_ENV_URL
 const DYNATRACE_API_TOKEN = process.env.DYNATRACE_API_TOKEN
-const SERVICE_NAME = process.env.OTEL_SERVICE_NAME || "openfeature-service"
-const SERVICE_VERSION = process.env.OTEL_SERVICE_VERSION || "0.1.0"
+
+// Local OTLP configuration
+const USE_LOCAL_OTLP =
+  process.env.USE_LOCAL_OTLP === "true" || process.env.USE_LOCAL_OTLP === "1"
+const LOCAL_OTLP_PORT = parseInt(process.env.LOCAL_OTLP_PORT || "14499", 10)
+const LOCAL_OTLP_BASE_URL = `http://localhost:${LOCAL_OTLP_PORT}/otlp`
 
 let sdkInstance: opentelemetry.NodeSDK | undefined
 let traceSpanProcessor: SpanProcessor | undefined
-let logRecordProcessor: LogRecordProcessor | undefined
-let metricReader: PeriodicExportingMetricReader | undefined
+
+export const appMetadata = {
+  name:
+    process.env.OTEL_SERVICE_NAME || packageInfo.name || "openfeature-service",
+  version: process.env.OTEL_SERVICE_VERSION || packageInfo.version || "0.1.0",
+  environment: process.env.NODE_ENV || process.env.ENVIRONMENT || "development",
+  packageName: packageInfo.name,
+  packageVersion: packageInfo.version,
+  project: "new-parth-project",
+  _environment: "66ccc3628c118d9a6da306e0",
+}
+let configured = false
+let tracer: Tracer
 
 export function initializeOpenTelemetry() {
   let tracesExporterUrl: string = ""
-  let metricsExporterUrl: string = ""
-  let logsExporterUrl: string = ""
   let exporterHeaders: Record<string, string> = {}
-  let configured = false
+  if (configured && tracer) {
+    return {
+      getTracer: () => tracer,
+    }
+  }
 
-  if (DYNATRACE_ENV_URL && DYNATRACE_API_TOKEN) {
+  if (USE_LOCAL_OTLP) {
+    // Use local OTLP endpoint
+    tracesExporterUrl = `${LOCAL_OTLP_BASE_URL}/v1/traces`
+    exporterHeaders = {}
+
+    console.log(
+      `Using local OTLP endpoint: Traces=${tracesExporterUrl}` // Removed metrics from log
+    )
+    configured = true
+  } else if (DYNATRACE_ENV_URL && DYNATRACE_API_TOKEN) {
+    // Use Dynatrace
     const DYNATRACE_OTLP_ENDPOINT = `${DYNATRACE_ENV_URL}/api/v2/otlp`
-
     tracesExporterUrl = `${DYNATRACE_OTLP_ENDPOINT}/v1/traces`
-    metricsExporterUrl = `${DYNATRACE_OTLP_ENDPOINT}/v1/metrics`
-    logsExporterUrl = `${DYNATRACE_OTLP_ENDPOINT}/v1/logs`
     exporterHeaders["Authorization"] = `Api-Token ${DYNATRACE_API_TOKEN}`
 
     console.log(
-      `Initializing OpenTelemetry for direct Dynatrace: Traces=${tracesExporterUrl}, Metrics=${metricsExporterUrl}, Logs=${logsExporterUrl}`
+      `Using Dynatrace OTLP endpoint: Traces=${tracesExporterUrl}` // Removed metrics from log
     )
     configured = true
   } else {
     console.log(
-      "Dynatrace URL or API Token not configured. OpenTelemetry will be no-op."
+      "Neither local OTLP nor Dynatrace endpoints are configured. OpenTelemetry will be no-op."
     )
   }
 
   if (!configured) {
     return {
-      getLogger: (): OtelLogger => ({
-        emit: (event: LogEvent) => {
-          console.log(
-            "OTel No-Op Logger (Not Configured):",
-            event.body,
-            event.attributes
-          )
-        },
-      }),
       getTracer: () => trace.getTracer("no-op-tracer-not-configured"),
-      getMeter: () => apiMetrics.getMeter("no-op-meter-not-configured"),
     }
   }
 
@@ -98,11 +117,18 @@ export function initializeOpenTelemetry() {
     "/var/lib/dynatrace/enrichment/dt_host_metadata.json",
   ]) {
     try {
-      const filePath = name.startsWith("/var") ? name : name
-      const fileContent = fs.readFileSync(filePath).toString("utf-8")
+      const fileContent = fs
+        .readFileSync(
+          name.startsWith("/var")
+            ? name
+            : fs.readFileSync(name).toString("utf-8").trim()
+        )
+        .toString("utf-8")
+
       dtmetadata = dtmetadata.merge(
         resourceFromAttributes(JSON.parse(fileContent.trim()))
       )
+
       console.log(`Merged Dynatrace metadata from ${name}`)
       break
     } catch (e: unknown) {
@@ -112,8 +138,8 @@ export function initializeOpenTelemetry() {
 
   const baseResource = defaultResource()
   const serviceResource = resourceFromAttributes({
-    [ATTR_SERVICE_NAME]: SERVICE_NAME,
-    [ATTR_SERVICE_VERSION]: SERVICE_VERSION,
+    [ATTR_SERVICE_NAME]: appMetadata.name,
+    [ATTR_SERVICE_VERSION]: appMetadata.version,
   })
   const resource = baseResource.merge(dtmetadata).merge(serviceResource)
 
@@ -123,78 +149,31 @@ export function initializeOpenTelemetry() {
   })
   traceSpanProcessor = new BatchSpanProcessor(traceExporter)
 
-  const logExporter = new OTLPLogExporter({
-    url: logsExporterUrl,
-    headers: exporterHeaders,
-  })
-  logRecordProcessor = new BatchLogRecordProcessor(logExporter)
-
-  const metricExporter = new OTLPMetricExporter({
-    url: metricsExporterUrl,
-    headers: exporterHeaders,
-    temporalityPreference: AggregationTemporality.DELTA,
-  })
-
-  metricReader = new PeriodicExportingMetricReader({
-    exporter: metricExporter,
-  })
-
   sdkInstance = new opentelemetry.NodeSDK({
     resource: resource,
     traceExporter: traceExporter,
-    metricReader: metricReader,
-    logRecordProcessors: [logRecordProcessor],
     instrumentations: [new HttpInstrumentation(), new ExpressInstrumentation()],
   })
 
   try {
     sdkInstance.start()
-    console.log(
-      "OpenTelemetry SDK started successfully with Traces, Metrics, and Logs export."
-    )
+    console.log("OpenTelemetry SDK started successfully with Traces export.")
 
-    const globalLoggerProvider = new LoggerProvider({
-      resource,
-      processors: [logRecordProcessor],
-    })
-    logs.setGlobalLoggerProvider(globalLoggerProvider)
+    // Store the tracer reference for future use
+    tracer = trace.getTracer(appMetadata.name, appMetadata.version)
   } catch (error: unknown) {
     console.error(
       "Error starting OpenTelemetry SDK:",
       error instanceof Error ? error.message : error
     )
+    tracer = trace.getTracer("no-op-tracer-sdk-start-failed")
     return {
-      getLogger: (): OtelLogger => ({
-        emit: (event: LogEvent) => {
-          console.log(
-            "OTel No-Op Logger (SDK Start Failed):",
-            event.body,
-            event.attributes
-          )
-        },
-      }),
-      getTracer: () => trace.getTracer("no-op-tracer-sdk-start-failed"),
-      getMeter: () => apiMetrics.getMeter("no-op-meter-sdk-start-failed"),
+      getTracer: () => tracer,
     }
   }
 
   return {
-    getLogger: (): OtelLogger => ({
-      emit: (event: LogEvent) => {
-        const { body, attributes } = event
-        const logger = logs.getLogger(SERVICE_NAME, SERVICE_VERSION)
-        logger.emit({
-          body: body,
-          attributes: attributes as unknown as OtelLogAttributes,
-        })
-      },
-    }),
-    getTracer: () => {
-      return trace.getTracer(SERVICE_NAME, SERVICE_VERSION)
-    },
-    getMeter: () => {
-      return apiMetrics.getMeter(SERVICE_NAME, SERVICE_VERSION)
-    },
+    getTracer: () => tracer,
   }
 }
 
@@ -216,4 +195,6 @@ export async function shutdownOpenTelemetry() {
 
 // Auto-initialize OpenTelemetry when this module is required (for --require flag usage)
 const otelSetup = initializeOpenTelemetry()
+
+// Export the setup directly since it's synchronous again
 export { otelSetup }

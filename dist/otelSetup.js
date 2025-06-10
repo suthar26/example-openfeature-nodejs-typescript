@@ -35,60 +35,89 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.otelSetup = exports.shutdownOpenTelemetry = exports.initializeOpenTelemetry = void 0;
+exports.otelSetup = exports.shutdownOpenTelemetry = exports.initializeOpenTelemetry = exports.appMetadata = void 0;
 // otel-setup.js
+//
+// OpenTelemetry Configuration with Local OTLP Fallback
+//
+// Environment Variables:
+// - USE_LOCAL_OTLP: Set to 'true' or '1' to enable local OTLP mode
+// - LOCAL_OTLP_PORT: Port for local OTLP endpoint (default: 14499)
+// - DYNATRACE_ENV_URL: Dynatrace environment URL (fallback)
+// - DYNATRACE_API_TOKEN: Dynatrace API token (fallback)
+// - OTEL_SERVICE_NAME: Override service name (default: from package.json)
+// - OTEL_SERVICE_VERSION: Override service version (default: from package.json)
+// - NODE_ENV or ENVIRONMENT: Environment name for metadata
+//
 const api_1 = require("@opentelemetry/api");
-const api_logs_1 = require("@opentelemetry/api-logs");
 const exporter_trace_otlp_proto_1 = require("@opentelemetry/exporter-trace-otlp-proto");
-const exporter_metrics_otlp_proto_1 = require("@opentelemetry/exporter-metrics-otlp-proto");
-const exporter_logs_otlp_http_1 = require("@opentelemetry/exporter-logs-otlp-http");
 const semantic_conventions_1 = require("@opentelemetry/semantic-conventions");
 const sdk_trace_base_1 = require("@opentelemetry/sdk-trace-base");
-const sdk_logs_1 = require("@opentelemetry/sdk-logs");
-const sdk_metrics_1 = require("@opentelemetry/sdk-metrics");
 require("dotenv/config");
 const resources_1 = require("@opentelemetry/resources");
 const opentelemetry = __importStar(require("@opentelemetry/sdk-node"));
 const fs_1 = __importDefault(require("fs"));
 const instrumentation_http_1 = require("@opentelemetry/instrumentation-http");
 const instrumentation_express_1 = require("@opentelemetry/instrumentation-express");
-// For troubleshooting, set OpenTelemetry diagnostics to verbose
-// diag.setLogger(new DiagConsoleLogger(), DiagLogLevel.DEBUG)
+let packageInfo = {};
+try {
+    const packageJsonPath = "./package.json";
+    const packageJsonContent = fs_1.default.readFileSync(packageJsonPath, "utf-8");
+    packageInfo = JSON.parse(packageJsonContent);
+}
+catch (error) {
+    console.warn("Could not read package.json:", error instanceof Error ? error.message : error);
+}
 const DYNATRACE_ENV_URL = process.env.DYNATRACE_ENV_URL;
 const DYNATRACE_API_TOKEN = process.env.DYNATRACE_API_TOKEN;
-const SERVICE_NAME = process.env.OTEL_SERVICE_NAME || "openfeature-service";
-const SERVICE_VERSION = process.env.OTEL_SERVICE_VERSION || "0.1.0";
+// Local OTLP configuration
+const USE_LOCAL_OTLP = process.env.USE_LOCAL_OTLP === "true" || process.env.USE_LOCAL_OTLP === "1";
+const LOCAL_OTLP_PORT = parseInt(process.env.LOCAL_OTLP_PORT || "14499", 10);
+const LOCAL_OTLP_BASE_URL = `http://localhost:${LOCAL_OTLP_PORT}/otlp`;
 let sdkInstance;
 let traceSpanProcessor;
-let logRecordProcessor;
-let metricReader;
+exports.appMetadata = {
+    name: process.env.OTEL_SERVICE_NAME || packageInfo.name || "openfeature-service",
+    version: process.env.OTEL_SERVICE_VERSION || packageInfo.version || "0.1.0",
+    environment: process.env.NODE_ENV || process.env.ENVIRONMENT || "development",
+    packageName: packageInfo.name,
+    packageVersion: packageInfo.version,
+    project: "new-parth-project",
+    _environment: "66ccc3628c118d9a6da306e0",
+};
+let configured = false;
+let tracer;
 function initializeOpenTelemetry() {
     let tracesExporterUrl = "";
-    let metricsExporterUrl = "";
-    let logsExporterUrl = "";
     let exporterHeaders = {};
-    let configured = false;
-    if (DYNATRACE_ENV_URL && DYNATRACE_API_TOKEN) {
+    if (configured && tracer) {
+        return {
+            getTracer: () => tracer,
+        };
+    }
+    if (USE_LOCAL_OTLP) {
+        // Use local OTLP endpoint
+        tracesExporterUrl = `${LOCAL_OTLP_BASE_URL}/v1/traces`;
+        exporterHeaders = {};
+        console.log(`Using local OTLP endpoint: Traces=${tracesExporterUrl}` // Removed metrics from log
+        );
+        configured = true;
+    }
+    else if (DYNATRACE_ENV_URL && DYNATRACE_API_TOKEN) {
+        // Use Dynatrace
         const DYNATRACE_OTLP_ENDPOINT = `${DYNATRACE_ENV_URL}/api/v2/otlp`;
         tracesExporterUrl = `${DYNATRACE_OTLP_ENDPOINT}/v1/traces`;
-        metricsExporterUrl = `${DYNATRACE_OTLP_ENDPOINT}/v1/metrics`;
-        logsExporterUrl = `${DYNATRACE_OTLP_ENDPOINT}/v1/logs`;
         exporterHeaders["Authorization"] = `Api-Token ${DYNATRACE_API_TOKEN}`;
-        console.log(`Initializing OpenTelemetry for direct Dynatrace: Traces=${tracesExporterUrl}, Metrics=${metricsExporterUrl}, Logs=${logsExporterUrl}`);
+        console.log(`Using Dynatrace OTLP endpoint: Traces=${tracesExporterUrl}` // Removed metrics from log
+        );
         configured = true;
     }
     else {
-        console.log("Dynatrace URL or API Token not configured. OpenTelemetry will be no-op.");
+        console.log("Neither local OTLP nor Dynatrace endpoints are configured. OpenTelemetry will be no-op.");
     }
     if (!configured) {
         return {
-            getLogger: () => ({
-                emit: (event) => {
-                    console.log("OTel No-Op Logger (Not Configured):", event.body, event.attributes);
-                },
-            }),
             getTracer: () => api_1.trace.getTracer("no-op-tracer-not-configured"),
-            getMeter: () => api_1.metrics.getMeter("no-op-meter-not-configured"),
         };
     }
     let dtmetadata = (0, resources_1.emptyResource)();
@@ -98,8 +127,11 @@ function initializeOpenTelemetry() {
         "/var/lib/dynatrace/enrichment/dt_host_metadata.json",
     ]) {
         try {
-            const filePath = name.startsWith("/var") ? name : name;
-            const fileContent = fs_1.default.readFileSync(filePath).toString("utf-8");
+            const fileContent = fs_1.default
+                .readFileSync(name.startsWith("/var")
+                ? name
+                : fs_1.default.readFileSync(name).toString("utf-8").trim())
+                .toString("utf-8");
             dtmetadata = dtmetadata.merge((0, resources_1.resourceFromAttributes)(JSON.parse(fileContent.trim())));
             console.log(`Merged Dynatrace metadata from ${name}`);
             break;
@@ -110,8 +142,8 @@ function initializeOpenTelemetry() {
     }
     const baseResource = (0, resources_1.defaultResource)();
     const serviceResource = (0, resources_1.resourceFromAttributes)({
-        [semantic_conventions_1.ATTR_SERVICE_NAME]: SERVICE_NAME,
-        [semantic_conventions_1.ATTR_SERVICE_VERSION]: SERVICE_VERSION,
+        [semantic_conventions_1.ATTR_SERVICE_NAME]: exports.appMetadata.name,
+        [semantic_conventions_1.ATTR_SERVICE_VERSION]: exports.appMetadata.version,
     });
     const resource = baseResource.merge(dtmetadata).merge(serviceResource);
     const traceExporter = new exporter_trace_otlp_proto_1.OTLPTraceExporter({
@@ -119,64 +151,26 @@ function initializeOpenTelemetry() {
         headers: exporterHeaders,
     });
     traceSpanProcessor = new sdk_trace_base_1.BatchSpanProcessor(traceExporter);
-    const logExporter = new exporter_logs_otlp_http_1.OTLPLogExporter({
-        url: logsExporterUrl,
-        headers: exporterHeaders,
-    });
-    logRecordProcessor = new sdk_logs_1.BatchLogRecordProcessor(logExporter);
-    const metricExporter = new exporter_metrics_otlp_proto_1.OTLPMetricExporter({
-        url: metricsExporterUrl,
-        headers: exporterHeaders,
-        temporalityPreference: sdk_metrics_1.AggregationTemporality.DELTA,
-    });
-    metricReader = new sdk_metrics_1.PeriodicExportingMetricReader({
-        exporter: metricExporter,
-    });
     sdkInstance = new opentelemetry.NodeSDK({
         resource: resource,
         traceExporter: traceExporter,
-        metricReader: metricReader,
-        logRecordProcessors: [logRecordProcessor],
         instrumentations: [new instrumentation_http_1.HttpInstrumentation(), new instrumentation_express_1.ExpressInstrumentation()],
     });
     try {
         sdkInstance.start();
-        console.log("OpenTelemetry SDK started successfully with Traces, Metrics, and Logs export.");
-        const globalLoggerProvider = new sdk_logs_1.LoggerProvider({
-            resource,
-            processors: [logRecordProcessor],
-        });
-        api_logs_1.logs.setGlobalLoggerProvider(globalLoggerProvider);
+        console.log("OpenTelemetry SDK started successfully with Traces export.");
+        // Store the tracer reference for future use
+        tracer = api_1.trace.getTracer(exports.appMetadata.name, exports.appMetadata.version);
     }
     catch (error) {
         console.error("Error starting OpenTelemetry SDK:", error instanceof Error ? error.message : error);
+        tracer = api_1.trace.getTracer("no-op-tracer-sdk-start-failed");
         return {
-            getLogger: () => ({
-                emit: (event) => {
-                    console.log("OTel No-Op Logger (SDK Start Failed):", event.body, event.attributes);
-                },
-            }),
-            getTracer: () => api_1.trace.getTracer("no-op-tracer-sdk-start-failed"),
-            getMeter: () => api_1.metrics.getMeter("no-op-meter-sdk-start-failed"),
+            getTracer: () => tracer,
         };
     }
     return {
-        getLogger: () => ({
-            emit: (event) => {
-                const { body, attributes } = event;
-                const logger = api_logs_1.logs.getLogger(SERVICE_NAME, SERVICE_VERSION);
-                logger.emit({
-                    body: body,
-                    attributes: attributes,
-                });
-            },
-        }),
-        getTracer: () => {
-            return api_1.trace.getTracer(SERVICE_NAME, SERVICE_VERSION);
-        },
-        getMeter: () => {
-            return api_1.metrics.getMeter(SERVICE_NAME, SERVICE_VERSION);
-        },
+        getTracer: () => tracer,
     };
 }
 exports.initializeOpenTelemetry = initializeOpenTelemetry;

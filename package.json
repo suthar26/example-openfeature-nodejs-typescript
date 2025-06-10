@@ -33,7 +33,9 @@
     "start": "open http://localhost:5002 && nodemon src/server.ts",
     "test": "jest",
     "dev": "nodemon src/server.ts",
-    "run-with-otel": "tsc && node --require otel-setup dist/server.js"
+    "with-otel": "tsc && node --require ./dist/otelSetup.js ./dist/server.js",
+    "with-local-otlp": "tsc && USE_LOCAL_OTLP=true node --require ./dist/otelSetup.js ./dist/server.js",
+    "with-local-otlp-4318": "tsc && USE_LOCAL_OTLP=true LOCAL_OTLP_PORT=4318 node --require ./dist/otelSetup.js ./dist/server.js"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",

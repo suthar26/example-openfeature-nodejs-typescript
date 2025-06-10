@@ -2,11 +2,11 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DynatraceOtelLogHook = void 0;
 const api_1 = require("@opentelemetry/api");
+const otelSetup_1 = require("./otelSetup"); // Import app metadata
 class DynatraceOtelLogHook {
-    constructor(otelLogger, tracer) {
+    constructor(tracer) {
         this.spans = new WeakMap();
         this.name = "DynatraceOtelLogHook";
-        this.logger = otelLogger;
         this.tracer = tracer;
     }
     before(hookContext) {
@@ -18,6 +18,9 @@ class DynatraceOtelLogHook {
             span.setAttributes({
                 "feature_flag.key": hookContext.flagKey,
                 "feature_flag.value_type": hookContext.flagValueType,
+                "feature_flag.flagset": hookContext.flagKey,
+                "feature_flag.project": otelSetup_1.appMetadata.project,
+                "feature_flag.environment": otelSetup_1.appMetadata._environment,
             });
             if ((_a = hookContext.clientMetadata) === null || _a === void 0 ? void 0 : _a.name) {
                 span.setAttributes({
@@ -33,29 +36,15 @@ class DynatraceOtelLogHook {
         this.spans.set(hookContext, span);
     }
     finally(hookContext, evaluationDetails) {
-        const { flagKey, flagValueType, clientMetadata, providerMetadata } = hookContext;
         const { value, variant, reason, errorCode, errorMessage } = evaluationDetails;
         const span = this.spans.get(hookContext);
         if (span) {
-            const logAttributes = {
-                "feature_flag.key": flagKey,
-                "feature_flag.value_type": flagValueType,
-                "feature_flag.value": value,
-                "feature_flag.variant": variant,
-                "feature_flag.reason": reason,
-                "openfeature.client.name": clientMetadata === null || clientMetadata === void 0 ? void 0 : clientMetadata.name,
-                "openfeature.provider.name": providerMetadata === null || providerMetadata === void 0 ? void 0 : providerMetadata.name,
-                "trace.id": span.spanContext().traceId,
-                "span.id": span.spanContext().spanId,
-            };
             if (errorCode) {
-                logAttributes["feature_flag.error_code"] = errorCode;
                 span.setAttributes({
                     "feature_flag.error_code": errorCode,
                 });
             }
             if (errorMessage) {
-                logAttributes["feature_flag.error_message"] = errorMessage;
                 span.setAttributes({
                     "feature_flag.error_message": errorMessage,
                 });
@@ -69,10 +58,6 @@ class DynatraceOtelLogHook {
                     "feature_flag.variant": variant,
                 });
             }
-            this.logger.emit({
-                body: `Feature flag '${flagKey}' evaluated. Reason: ${reason}.`,
-                attributes: logAttributes,
-            });
             span.end();
         }
     }
@@ -84,20 +69,12 @@ class DynatraceOtelLogHook {
                 "feature_flag.key": flagKey,
                 "error.message": err.message,
                 "error.stack": err.stack || "",
+                // App metadata
+                "app.name": otelSetup_1.appMetadata.name,
+                "app.version": otelSetup_1.appMetadata.version,
+                "app.environment": otelSetup_1.appMetadata._environment,
             });
             span.setStatus({ code: api_1.SpanStatusCode.ERROR, message: err.message });
-            const logAttributes = {
-                "feature_flag.key": flagKey,
-                "feature_flag.value_type": "error",
-                "feature_flag.value": false,
-                "feature_flag.error_message": err.message,
-                "trace.id": span.spanContext().traceId,
-                "span.id": span.spanContext().spanId,
-            };
-            this.logger.emit({
-                body: `Error during feature flag '${flagKey}' evaluation.`,
-                attributes: logAttributes,
-            });
             span.end();
         }
     }

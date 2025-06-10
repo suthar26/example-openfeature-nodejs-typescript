@@ -9,11 +9,10 @@ if (!DEVCYCLE_SERVER_SDK_KEY) {
   throw new Error("DEVCYCLE_SERVER_SDK_KEY environment variable is required")
 }
 
-const { getLogger, getTracer } = otelSetup
-const logger = getLogger()
+const { getTracer } = otelSetup
 const tracer = getTracer()
 
-const dynatraceLogHook = new DynatraceOtelLogHook(logger, tracer)
+const dynatraceLogHook = new DynatraceOtelLogHook(tracer)
 
 export async function initializeDevCycleWithOpenFeature() {
   const devcycleClient = initializeDevCycle(DEVCYCLE_SERVER_SDK_KEY as string, {
